@@ -1,4 +1,8 @@
-# To-Do List (being built for studyproj)
-Stemming from dr_doomer's TDL, this is a to-be tool for managing tasks. This will be soon implemented in our latest project.
+# To-Do List (being built for studyproj) [ a todo list for a todo list :) ]
+Stemming from dr_doomer's TDL, this is a to-be tool for managing tasks. This will be soon implemented in our ongoing project.
 
-- to add: deadline tracker built-in with TDL
+- to add: deadline tracker built-in with TDL ( to be done by dr-doomer )
+- to merge deadline tracker with the tdl with gui ( to be done by thakurrrrrrrrrpushkar )
+
+- to make study timer ( to be done by thakurrrrrpushkar )
+- to merge gui with timer ( to be done by dr-doomer )
