@@ -2,5 +2,6 @@
 Stemming from dr_doomer's TDL, this is a to-be tool for managing tasks. This will be soon implemented in our ongoing project.
 
 - <s>to add: deadline tracker built-in with TDL ( to be done by dr-doomer )</s>
-- to merge deadline tracker with the tdl with gui ( to be done by thakurrrrrrrrrpushkar )
 - <s> to make study timer with GUI ( to be done by thakurrrrrpushkar ) </s>
+- <s>to make stickynotes CLI </s>
+- to merge stickynotes, TDL, and study timer into a single application (to be done by both thakurrrrrpushkar + dr-doomer)
