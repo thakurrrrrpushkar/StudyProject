@@ -1,5 +1,7 @@
 import json
 import os
+from datetime import date
+
 FILE_NAME = "tasks.json"
 def load_tasks():
     if not os.path.exists(FILE_NAME):
@@ -10,25 +12,75 @@ def load_tasks():
     except json.JSONDecodeError:
         print("Error: Failed to decode JSON from the tasks file.")
         return []
+    
 def save_tasks(tasks):
     with open(FILE_NAME, "w") as file:   
         json.dump(tasks, file, indent=4) 
+
+def deadline_sort_key(task):
+    deadline = task.get("deadline", "").strip()
+    if not deadline:
+        return (2, "")
+    try:
+        return (0, date.fromisoformat(deadline))
+    except ValueError:
+        return (1, deadline.casefold())
+
 def view_tasks(tasks):
     if not tasks:
         print("No tasks found.")
     else:
+        tasks_to_view = tasks
+        if any(task.get("deadline") for task in tasks):
+            print("\nView tasks by:")
+            print("1. Deadline (soonest first)")
+            print("2. Creation date (latest to oldest)")
+            while True:
+                choice = input("Enter your choice (1-2): ").strip()
+                if choice in ("1", "2"):
+                    break
+                print("Invalid choice. Please enter 1 or 2.")
+
+            if choice == "1":
+                tasks_to_view = sorted(tasks, key=deadline_sort_key)
+            else:
+                tasks_to_view = sorted(
+                    tasks,
+                    key=lambda task: task.get("created_at", ""),
+                    reverse=True, #puts the recent task first
+                )
+
         print("\n------ TASKS ------")
-        for index, task in enumerate(tasks, start=1):
+        for index, task in enumerate(tasks_to_view, start=1):
             status = "Done" if task["completed"] else "Pending"
-            print(f"{index}. {task['Title']} ---> {status}") 
+            deadline = f" (Deadline: {task.get('deadline', '')})" if task.get("deadline") else ""
+            created_at = f" (Created: {task['created_at']})" if task.get("created_at") else ""
+            note = f" (Note: {task.get('note', '')})" if task.get("note") else ""
+            print(f"{index}. {task['Title']} ---> {status}{deadline}{created_at}{note}")
+
 def add_task(tasks):
     Title = input("Enter the task name: ").strip() 
+    deadline = input("Enter the deadline (optional, YYYY-MM-DD): ").strip()
+    if deadline:
+        try:
+            date.fromisoformat(deadline)
+        except ValueError:
+            print("Invalid date format. Please use YYYY-MM-DD.")
+            return
+    note = input("Enter a note (optional): ").strip()
     if not Title:
         print("Task name cannot be empty.")
         return
-    tasks.append({"Title": Title, "completed": False})    
+    tasks.append({
+        "Title": Title,
+        "completed": False,
+        "deadline": deadline,
+        "created_at": date.today().isoformat(), # date & time
+        "note": note
+    })
     save_tasks(tasks)
     print(f"Task added successfully.")
+
 def complete_task(tasks):
     view_tasks(tasks)
     if not tasks:
@@ -43,6 +95,7 @@ def complete_task(tasks):
             print("Invalid task number.")
     except ValueError:
         print("Please enter a valid number.")
+
 def delete_task(tasks):
     view_tasks(tasks)
     if not tasks:
@@ -57,6 +110,7 @@ def delete_task(tasks):
             print("Invalid task number.")
     except ValueError:
         print("Please enter a valid number.")
+
 def main():
     tasks = load_tasks()
     while True:
