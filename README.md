@@ -3,5 +3,4 @@ Stemming from dr_doomer's TDL, this is a to-be tool for managing tasks. This wil
 
 - to add: deadline tracker built-in with TDL ( to be done by dr-doomer )
 - to merge deadline tracker with the tdl with gui ( to be done by thakurrrrrrrrrpushkar )
-
-- to make study timer with GUI ( to be done by thakurrrrrpushkar )
+- <s> to make study timer with GUI ( to be done by thakurrrrrpushkar ) </s>
