@@ -1,7 +1,9 @@
 import json
 import os
+from datetime import datetime
 FILENAME = "sticky_notes.json"
 MAX_NOTES = 5
+
 def load_notes():
     if os.path.exists(FILENAME):
         try:
@@ -10,30 +12,59 @@ def load_notes():
         except json.JSONDecodeError:
             return []
     return []
+
 def save_notes(notes):
     with open(FILENAME, "w") as f:
         json.dump(notes, f, indent=4)
+
 def view_notes(notes):
     if not notes:
         print("\nNo sticky notes found. Your board is empty.")
         return
     print("\n--- YOUR STICKY NOTES ---")
     for i, note in enumerate(notes, 1):
-        print(f"[{i}] {note}")
+        if isinstance(note, dict):
+            print(f"[{i}]")
+            if note.get("heading"):
+                print(f"  Heading: {note['heading']}")
+            if note.get("created_at"):
+                print(f"  Created: {note['created_at']}")
+            print(f"  Content: {note.get('content', '')}")
+        else:
+            print(f"[{i}] {note}")
     print(f"--------------------------")
     print(f"Total Notes: {len(notes)}/{MAX_NOTES}\n")
+
 def add_note(notes):
     if len(notes) >= MAX_NOTES:
         print(f"\nLimit Reached: You can only have a maximum of {MAX_NOTES} sticky notes. Delete one to add a new note.")
         return notes
+    while True:
+        wants_heading = input("\nWould you like to give this note a heading? (y/n): ").strip().lower()
+        if wants_heading in ("y", "yes", "n", "no"):
+            break
+        print("Please enter y or n.")
+
+    heading = None
+    if wants_heading in ("y", "yes"):
+        heading = input("Enter a heading: ").strip()
+        if not heading:
+            print("Heading cannot be empty. Proceeding without a heading.")
+            heading = None
+
     content = input("\nEnter the content for your sticky note: ").strip()
     if content:
-        notes.append(content)
+        notes.append({
+            "heading": heading,
+            "content": content,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
         save_notes(notes)
         print("\nSticky note added successfully!")
     else:
         print("\nNote cannot be empty.")
     return notes
+
 def edit_note(notes):
     view_notes(notes)
     if not notes:
@@ -43,7 +74,11 @@ def edit_note(notes):
         if 1 <= choice <= len(notes):
             new_content = input(f"Enter new content for note {choice}: ").strip()
             if new_content:
-                notes[choice - 1] = new_content
+                note = notes[choice - 1]
+                if isinstance(note, dict):
+                    note["content"] = new_content
+                else:
+                    notes[choice - 1] = new_content
                 save_notes(notes)
                 print("\nSticky note updated successfully!")
             else:
@@ -53,6 +88,7 @@ def edit_note(notes):
     except ValueError:
         print("\nPlease enter a valid number.")
     return notes
+
 def delete_note(notes):
     view_notes(notes)
     if not notes:
@@ -68,6 +104,7 @@ def delete_note(notes):
     except ValueError:
         print("\nPlease enter a valid number.")
     return notes
+
 def main():
     notes = load_notes()
     while True:
