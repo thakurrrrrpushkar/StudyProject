@@ -7,3 +7,5 @@
 - <s>to make stickynotes CLI (to be done by thakurrrrrpushkar)</s><br>
 - <s> Sticky notes support an optional heading and show when each note was created feature (to be done by dr-doomer)  </s><br>
 - to merge stickynotes, TDL, and study timer into a single application (to be done by both thakurrrrrpushkar + dr-doomer)
+- convert json database into sqlite3 (dr. doomer)
+- make gui of stickynotes ( thakurrrrrrpushkar )
