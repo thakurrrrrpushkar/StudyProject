@@ -1,1 +1,11 @@
-
+import tkinter as tk
+window = tk.Tk()
+window.geometry("700x400")
+window.resizable(False, False)
+window.configure(bg="#293477")
+lbl = tk.Label(window, text="Mini Player", font = ("Helvetica", 50, "bold", "underline"), bg="#293477", fg="#FFFFFF")
+lbl.pack()
+sublbl = tk.Label(window, text="Copyright Free Music for your study sessions!", font = ("Helvetica", 20, "italic"), bg="#293477", fg="#7B8ACA")
+sublbl.pack()
+window.title("MiniPlayer")
+window.mainloop()
