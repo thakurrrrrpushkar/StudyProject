@@ -1,7 +1,6 @@
 import json
 import os
 from datetime import datetime
-#Test Comment bla bla bla
 FILENAME = "sticky_notes.json"
 def load_notes():
     if os.path.exists(FILENAME):
@@ -96,7 +95,7 @@ def delete_note(notes):
 def main():
     notes = load_notes()
     while True:
-        print("\n=== STICKY NOTES CLI ===")
+        print("\n=== STICKY NOTES ===")
         print("1. View Notes")
         print("2. Add Note")
         print("3. Edit Note")

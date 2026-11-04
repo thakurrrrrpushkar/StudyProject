@@ -1,0 +1,26 @@
+import tkinter as tk
+window = tk.Tk()
+window.geometry("1920x1080")
+window.resizable(True, True)
+def studytools():
+    window1 = tk.Toplevel(window)
+    lbl1 = tk.Label(window1, text="Study Tools", font = ("Helvetica", 50, "bold"), fg="#423C3C")
+    lbl1.pack()
+def musicplayer():
+    window2 = tk.Toplevel(window)
+    lbl2 = tk.Label(window2, text="Music Player", font = ("Helvetica", 50, "bold"), fg="#423C3C")
+    lbl2.pack()
+def chat():
+    window3 = tk.Toplevel(window)
+    lbl3 = tk.Label(window3, text="Chat", font = ("Helvetica", 50, "bold"), fg="#423C3C")
+    lbl3.pack()
+lbl = tk.Label(window, text="Study Project", font = ("Helvetica", 50, "bold"), fg="#423C3C")
+lbl.pack()
+Toolsbtn = tk.Button(window, text="Study Tools", font = ("Helvetica", 30, "bold"), fg="#423C3C", command=studytools)
+Toolsbtn.pack(pady=20)
+Musicbtn = tk.Button(window, text="Music Player", font = ("Helvetica", 30, "bold"), fg="#423C3C", command=musicplayer)
+Musicbtn.pack(pady=20)
+Chatbtn = tk.Button(window, text="Chat", font = ("Helvetica", 30, "bold"), fg="#423C3C", command=chat)
+Chatbtn.pack(pady=20)
+window.title("Study Project")
+window.mainloop()
