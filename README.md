@@ -8,4 +8,4 @@
 - <s> Sticky notes support an optional heading and show when each note was created feature (to be done by dr-doomer)  </s><br>
 - to merge stickynotes, TDL, and study timer into a single application (to be done by both thakurrrrrpushkar + dr-doomer)<br>
 - convert json database into sqlite3 (dr. doomer)<br>
-- make gui of stickynotes ( thakurrrrrrpushkar )<br>
+- make gui of sticky notes and solve edit problem ( dr-doomer )<br>
