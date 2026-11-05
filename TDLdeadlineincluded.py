@@ -1,21 +1,111 @@
 import json
 import os
+import sqlite3
+from contextlib import closing
 from datetime import date
 
-FILE_NAME = "tasks.json"
-def load_tasks():
-    if not os.path.exists(FILE_NAME):
-        return [] 
-    try :
-        with open(FILE_NAME, "r") as file:
-            return json.load(file)
+DATABASE_NAME = "tasks.db"
+LEGACY_FILE_NAME = "tasks.json"
+
+
+def initialize_database(connection):
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            completed INTEGER NOT NULL DEFAULT 0,
+            deadline TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    connection.commit()
+
+
+def migrate_json_tasks(connection):
+    if not os.path.exists(LEGACY_FILE_NAME):
+        return
+
+    try:
+        with open(LEGACY_FILE_NAME, "r") as file:
+            tasks = json.load(file)
     except json.JSONDecodeError:
         print("Error: Failed to decode JSON from the tasks file.")
-        return []
+        return
+
+    if not isinstance(tasks, list):
+        print("Error: The tasks JSON file must contain a list.")
+        return
+
+    connection.executemany(
+        """
+        INSERT INTO tasks (title, completed, deadline, created_at, note)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                task.get("Title", ""),
+                int(bool(task.get("completed", False))),
+                task.get("deadline", ""),
+                task.get("created_at", date.today().isoformat()),
+                task.get("note", ""),
+            )
+            for task in tasks
+            if isinstance(task, dict) and task.get("Title")
+        ],
+    )
+    connection.commit()
+    os.replace(LEGACY_FILE_NAME, f"{LEGACY_FILE_NAME}.migrated")
+
+
+def load_tasks():
+    with closing(sqlite3.connect(DATABASE_NAME)) as connection:
+        initialize_database(connection)
+        if connection.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 0:
+            migrate_json_tasks(connection)
+        rows = connection.execute(
+            """
+            SELECT title, completed, deadline, created_at, note
+            FROM tasks
+            ORDER BY id
+            """
+        ).fetchall()
+    return [
+        {
+            "Title": title,
+            "completed": bool(completed),
+            "deadline": deadline,
+            "created_at": created_at,
+            "note": note,
+        }
+        for title, completed, deadline, created_at, note in rows
+    ]
     
+
 def save_tasks(tasks):
-    with open(FILE_NAME, "w") as file:   
-        json.dump(tasks, file, indent=4) 
+    with closing(sqlite3.connect(DATABASE_NAME)) as connection:
+        initialize_database(connection)
+        connection.execute("DELETE FROM tasks")
+        connection.executemany(
+            """
+            INSERT INTO tasks (title, completed, deadline, created_at, note)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    task["Title"],
+                    int(bool(task["completed"])),
+                    task.get("deadline", ""),
+                    task.get("created_at", date.today().isoformat()),
+                    task.get("note", ""),
+                )
+                for task in tasks
+            ],
+        )
+        connection.commit()
+
 
 def deadline_sort_key(task):
     deadline = task.get("deadline", "").strip()
