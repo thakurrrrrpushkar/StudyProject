@@ -1,45 +1,123 @@
-"""
-Sticky Notes — Tkinter GUI version.
-
-Click any note to open it in an edit box pre-filled with its current
-content (so nothing is lost, unlike the CLI's full-overwrite prompt).
-Uses the same stickynotes.json file format as stickynotesCLI.py, so
-notes created in one are visible in the other.
-"""
-
 import json
 import os
+import sqlite3
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 from datetime import datetime
 
 APP_DATA_DIR = Path(os.environ.get("APPDATA") or Path.home()) / "StudyTools"
-FILENAME = APP_DATA_DIR / "stickynotes.json"
-LEGACY_FILENAME = Path(__file__).with_name("stickynotes.json")
+DB_FILENAME = APP_DATA_DIR / "stickynotes.db"
+
+# Old JSON file locations, checked only for a one-time import into the DB.
+LEGACY_APPDATA_JSON = APP_DATA_DIR / "stickynotes.json"
+LEGACY_SCRIPT_JSON = Path(__file__).with_name("stickynotes.json")
+
+
+# ---------- database layer ----------
+
+def get_connection():
+    APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_FILENAME)
+    conn.row_factory = sqlite3.Row   # lets us read rows like dicts, e.g. row["content"]
+    return conn
+
+
+def init_db():
+    conn = get_connection()
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            heading TEXT,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def _migrate_legacy_json_if_needed():
+    """One-time import: if the database has no notes yet, and an old
+    stickynotes.json exists, copy its notes into the database."""
+    conn = get_connection()
+    try:
+        existing_count = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
+        if existing_count > 0:
+            return
+
+        legacy_path = None
+        if LEGACY_APPDATA_JSON.exists():
+            legacy_path = LEGACY_APPDATA_JSON
+        elif LEGACY_SCRIPT_JSON.exists():
+            legacy_path = LEGACY_SCRIPT_JSON
+
+        if legacy_path is None:
+            return
+
+        with legacy_path.open("r", encoding="utf-8") as file:
+            old_notes = json.load(file)
+
+        for note in old_notes:
+            heading = note.get("heading") if isinstance(note, dict) else None
+            content = note.get("content", "") if isinstance(note, dict) else note
+            created_at = note.get("created_at") if isinstance(note, dict) else None
+            if not created_at:
+                created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            conn.execute(
+                "INSERT INTO notes (heading, content, created_at) VALUES (?, ?, ?)",
+                (heading, content, created_at),
+            )
+        conn.commit()
+    except (json.JSONDecodeError, OSError, sqlite3.Error):
+        pass   # if migration fails for any reason, just start with an empty DB
+    finally:
+        conn.close()
 
 
 def load_notes():
-    try:
-        APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        if not FILENAME.exists() and LEGACY_FILENAME.exists():
-            with LEGACY_FILENAME.open("r", encoding="utf-8") as file:
-                notes = json.load(file)
-            save_notes(notes)
-            return notes
-        if FILENAME.exists():
-            with FILENAME.open("r", encoding="utf-8") as file:
-                return json.load(file)
-    except json.JSONDecodeError:
-        return []
-    return []
+    """Returns a list of dicts: {id, heading, content, created_at}, oldest first."""
+    init_db()
+    _migrate_legacy_json_if_needed()
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, heading, content, created_at FROM notes ORDER BY id"
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 
-def save_notes(notes):
-    APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with FILENAME.open("w", encoding="utf-8") as file:
-        json.dump(notes, file, indent=4)
+def insert_note(heading, content):
+    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO notes (heading, content, created_at) VALUES (?, ?, ?)",
+        (heading, content, created_at),
+    )
+    conn.commit()
+    conn.close()
 
+
+def update_note(note_id, heading, content):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE notes SET heading = ?, content = ? WHERE id = ?",
+        (heading, content, note_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_note_by_id(note_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+    conn.commit()
+    conn.close()
+
+
+# ---------- GUI layer ----------
 
 class StickyNotesApp:
     def __init__(self, root):
@@ -50,11 +128,11 @@ class StickyNotesApp:
 
         try:
             self.notes = load_notes()
-        except OSError as error:
+        except (OSError, sqlite3.Error) as error:
             self.notes = []
             messagebox.showerror(
                 "Unable to access notes",
-                f"StudyTools could not access its notes file:\n{error}",
+                f"StudyTools could not access its notes database:\n{error}",
                 parent=root,
             )
 
@@ -104,23 +182,26 @@ class StickyNotesApp:
             ).pack(pady=20)
             return
 
-        for index, note in enumerate(self.notes):
-            self.render_note_card(index, note)
+        for note in self.notes:
+            self.render_note_card(note)
 
-    def render_note_card(self, index, note):
-        heading = note.get("heading") if isinstance(note, dict) else None
-        content = note.get("content") if isinstance(note, dict) else note
-        created_at = note.get("created_at") if isinstance(note, dict) else None
+    def render_note_card(self, note):
+        note_id = note["id"]
+        heading = note.get("heading")
+        content = note.get("content", "")
+        created_at = note.get("created_at")
 
         card = tk.Frame(self.notes_frame, bg="#fff6a9", bd=0)
         card.pack(fill="x", pady=6, padx=4)
 
-        # clicking anywhere on the card opens the edit dialog
-        card.bind("<Button-1>", lambda e, i=index: self.open_edit_dialog(i))
+        # clicking anywhere on the card opens the edit dialog, keyed by the note's
+        # database id (not its position in the list) so edits/deletes always hit
+        # the right row even after notes are added or removed elsewhere
+        card.bind("<Button-1>", lambda e, nid=note_id: self.open_edit_dialog(nid))
 
         inner = tk.Frame(card, bg="#fff6a9")
         inner.pack(fill="x", padx=10, pady=8)
-        inner.bind("<Button-1>", lambda e, i=index: self.open_edit_dialog(i))
+        inner.bind("<Button-1>", lambda e, nid=note_id: self.open_edit_dialog(nid))
 
         if heading:
             heading_label = tk.Label(
@@ -128,14 +209,14 @@ class StickyNotesApp:
                 bg="#fff6a9", fg="#333333", anchor="w"
             )
             heading_label.pack(fill="x")
-            heading_label.bind("<Button-1>", lambda e, i=index: self.open_edit_dialog(i))
+            heading_label.bind("<Button-1>", lambda e, nid=note_id: self.open_edit_dialog(nid))
 
         content_label = tk.Label(
             inner, text=content, font=("Segoe UI", 10), bg="#fff6a9",
             fg="#333333", anchor="w", justify="left", wraplength=400
         )
         content_label.pack(fill="x", pady=(2, 0))
-        content_label.bind("<Button-1>", lambda e, i=index: self.open_edit_dialog(i))
+        content_label.bind("<Button-1>", lambda e, nid=note_id: self.open_edit_dialog(nid))
 
         meta_bar = tk.Frame(inner, bg="#fff6a9")
         meta_bar.pack(fill="x", pady=(6, 0))
@@ -149,7 +230,7 @@ class StickyNotesApp:
         tk.Button(
             meta_bar, text="Delete", font=("Segoe UI", 8), bg="#e57373",
             fg="white", relief="flat", padx=6,
-            command=lambda i=index: self.delete_note(i)
+            command=lambda nid=note_id: self.delete_note(nid)
         ).pack(side="right")
 
     # ---------- actions ----------
@@ -158,22 +239,28 @@ class StickyNotesApp:
         heading = simpledialog.askstring("Heading (optional)", "Enter a heading, or leave blank:")
         content = simpledialog.askstring("New Note", "Enter the note content:")
         if content and content.strip():
-            self.notes.append({
-                "heading": heading.strip() if heading and heading.strip() else None,
-                "content": content.strip(),
-                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            })
-            if self._save_notes():
+            try:
+                insert_note(
+                    heading.strip() if heading and heading.strip() else None,
+                    content.strip(),
+                )
+                self.notes = load_notes()
                 self.refresh_notes()
-            else:
-                self.notes.pop()
+            except sqlite3.Error as error:
+                messagebox.showerror(
+                    "Unable to save notes",
+                    f"StudyTools could not save your note:\n{error}",
+                    parent=self.root,
+                )
         elif content is not None:
             messagebox.showwarning("Empty note", "Note content cannot be empty.")
 
-    def open_edit_dialog(self, index):
-        note = self.notes[index]
-        heading = note.get("heading", "") if isinstance(note, dict) else ""
-        content = note.get("content", "") if isinstance(note, dict) else note
+    def open_edit_dialog(self, note_id):
+        note = next((n for n in self.notes if n["id"] == note_id), None)
+        if note is None:
+            return
+        heading = note.get("heading") or ""
+        content = note.get("content") or ""
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Edit Note")
@@ -186,14 +273,14 @@ class StickyNotesApp:
             fill="x", padx=10, pady=(10, 0)
         )
         heading_entry = tk.Entry(dialog, font=("Segoe UI", 10))
-        heading_entry.insert(0, heading or "")
+        heading_entry.insert(0, heading)
         heading_entry.pack(fill="x", padx=10, pady=(0, 10))
 
         tk.Label(dialog, text="Content:", bg="#2b2b2b", fg="white", anchor="w").pack(
             fill="x", padx=10
         )
         content_box = tk.Text(dialog, font=("Segoe UI", 10), wrap="word", height=10)
-        content_box.insert("1.0", content or "")   # pre-fill with EXISTING content
+        content_box.insert("1.0", content)   # pre-fill with EXISTING content
         content_box.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         content_box.focus_set()
 
@@ -206,18 +293,17 @@ class StickyNotesApp:
             if not new_content:
                 messagebox.showwarning("Empty note", "Note content cannot be empty.", parent=dialog)
                 return
-            if isinstance(note, dict):
-                note["content"] = new_content
-                note["heading"] = new_heading if new_heading else None
-            else:
-                self.notes[index] = {
-                    "heading": new_heading if new_heading else None,
-                    "content": new_content,
-                    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                }
-            if self._save_notes():
+            try:
+                update_note(note_id, new_heading if new_heading else None, new_content)
+                self.notes = load_notes()
                 self.refresh_notes()
                 dialog.destroy()
+            except sqlite3.Error as error:
+                messagebox.showerror(
+                    "Unable to save notes",
+                    f"StudyTools could not save your changes:\n{error}",
+                    parent=dialog,
+                )
 
         tk.Button(
             button_bar, text="Save", bg="#4CAF50", fg="white", relief="flat",
@@ -229,26 +315,19 @@ class StickyNotesApp:
             padx=14, pady=4, command=dialog.destroy
         ).pack(side="right")
 
-    def delete_note(self, index):
+    def delete_note(self, note_id):
         confirm = messagebox.askyesno("Delete Note", "Delete this sticky note?")
         if confirm:
-            removed_note = self.notes.pop(index)
-            if self._save_notes():
+            try:
+                delete_note_by_id(note_id)
+                self.notes = load_notes()
                 self.refresh_notes()
-            else:
-                self.notes.insert(index, removed_note)
-
-    def _save_notes(self):
-        try:
-            save_notes(self.notes)
-            return True
-        except OSError as error:
-            messagebox.showerror(
-                "Unable to save notes",
-                f"StudyTools could not save your notes:\n{error}",
-                parent=self.root,
-            )
-            return False
+            except sqlite3.Error as error:
+                messagebox.showerror(
+                    "Unable to delete note",
+                    f"StudyTools could not delete your note:\n{error}",
+                    parent=self.root,
+                )
 
 
 if __name__ == "__main__":
