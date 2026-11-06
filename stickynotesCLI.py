@@ -9,26 +9,36 @@ notes created in one are visible in the other.
 
 import json
 import os
+from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 from datetime import datetime
 
-FILENAME = "stickynotes.json"
+APP_DATA_DIR = Path(os.environ.get("APPDATA") or Path.home()) / "StudyTools"
+FILENAME = APP_DATA_DIR / "stickynotes.json"
+LEGACY_FILENAME = Path(__file__).with_name("stickynotes.json")
 
 
 def load_notes():
-    if os.path.exists(FILENAME):
-        try:
-            with open(FILENAME, "r") as f:
-                return json.load(f)
-        except json.JSONDecodeError:
-            return []
+    try:
+        APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        if not FILENAME.exists() and LEGACY_FILENAME.exists():
+            with LEGACY_FILENAME.open("r", encoding="utf-8") as file:
+                notes = json.load(file)
+            save_notes(notes)
+            return notes
+        if FILENAME.exists():
+            with FILENAME.open("r", encoding="utf-8") as file:
+                return json.load(file)
+    except json.JSONDecodeError:
+        return []
     return []
 
 
 def save_notes(notes):
-    with open(FILENAME, "w") as f:
-        json.dump(notes, f, indent=4)
+    APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with FILENAME.open("w", encoding="utf-8") as file:
+        json.dump(notes, file, indent=4)
 
 
 class StickyNotesApp:
@@ -38,7 +48,15 @@ class StickyNotesApp:
         self.root.geometry("500x500")
         self.root.configure(bg="#2b2b2b")
 
-        self.notes = load_notes()
+        try:
+            self.notes = load_notes()
+        except OSError as error:
+            self.notes = []
+            messagebox.showerror(
+                "Unable to access notes",
+                f"StudyTools could not access its notes file:\n{error}",
+                parent=root,
+            )
 
         # --- top bar ---
         top_bar = tk.Frame(root, bg="#2b2b2b")
@@ -145,8 +163,10 @@ class StickyNotesApp:
                 "content": content.strip(),
                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             })
-            save_notes(self.notes)
-            self.refresh_notes()
+            if self._save_notes():
+                self.refresh_notes()
+            else:
+                self.notes.pop()
         elif content is not None:
             messagebox.showwarning("Empty note", "Note content cannot be empty.")
 
@@ -195,9 +215,9 @@ class StickyNotesApp:
                     "content": new_content,
                     "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 }
-            save_notes(self.notes)
-            self.refresh_notes()
-            dialog.destroy()
+            if self._save_notes():
+                self.refresh_notes()
+                dialog.destroy()
 
         tk.Button(
             button_bar, text="Save", bg="#4CAF50", fg="white", relief="flat",
@@ -212,9 +232,23 @@ class StickyNotesApp:
     def delete_note(self, index):
         confirm = messagebox.askyesno("Delete Note", "Delete this sticky note?")
         if confirm:
-            self.notes.pop(index)
+            removed_note = self.notes.pop(index)
+            if self._save_notes():
+                self.refresh_notes()
+            else:
+                self.notes.insert(index, removed_note)
+
+    def _save_notes(self):
+        try:
             save_notes(self.notes)
-            self.refresh_notes()
+            return True
+        except OSError as error:
+            messagebox.showerror(
+                "Unable to save notes",
+                f"StudyTools could not save your notes:\n{error}",
+                parent=self.root,
+            )
+            return False
 
 
 if __name__ == "__main__":
